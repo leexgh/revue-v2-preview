@@ -19,7 +19,6 @@
     "@types/react-table": "^7.7.20",
     "bootstrap": "4.3.1",
     "font-awesome": "4.7.0",
-    "igv": "^3.8.10",
     "lodash": "^4.17.21",
     "react": "^18.2.0",
     "react-bootstrap": "^2.5.0",

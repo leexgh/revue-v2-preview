@@ -23,6 +23,47 @@ const parseLocus = (genomicLocation: string) => {
     };
 };
 
+const IGV_SRC = 'https://cdn.jsdelivr.net/npm/igv@3.8.10/dist/igv.min.js';
+
+let igvLoader: Promise<any> | null = null;
+
+/** Load igv.js once per page and resolve with the global it installs. */
+const loadIgv = (): Promise<any> => {
+    if ((window as any).igv?.createBrowser) {
+        return Promise.resolve((window as any).igv);
+    }
+    if (igvLoader) {
+        return igvLoader;
+    }
+    igvLoader = new Promise((resolve, reject) => {
+        const existing = document.querySelector<HTMLScriptElement>(
+            `script[src="${IGV_SRC}"]`
+        );
+        const script = existing || document.createElement('script');
+        const done = () => {
+            const igv = (window as any).igv;
+            if (igv?.createBrowser) {
+                resolve(igv);
+            } else {
+                reject(new Error('igv.js loaded but did not expose createBrowser.'));
+            }
+        };
+        script.addEventListener('load', done);
+        script.addEventListener('error', () =>
+            reject(new Error('igv.js could not be loaded from the CDN.'))
+        );
+        if (!existing) {
+            script.src = IGV_SRC;
+            script.async = true;
+            document.head.appendChild(script);
+        }
+    });
+    igvLoader.catch(() => {
+        igvLoader = null;        // let a later mount retry
+    });
+    return igvLoader;
+};
+
 export const IgvPanel: React.FC<{ variant: Variant }> = ({ variant }) => {
     const container = useRef<HTMLDivElement>(null);
     // Shown by default; the button hides it.
@@ -53,20 +94,13 @@ export const IgvPanel: React.FC<{ variant: Variant }> = ({ variant }) => {
         const mount = document.createElement('div');
         host.appendChild(mount);
 
-        // The UMD build interops cleanly with webpack; the ESM one resolves to an
-        // empty namespace here. igv.js is ~1.5 MB and pulls the hg19 reference
-        // from igv.org, so it stays a lazy import even though the panel opens by
-        // default: the chunk is fetched once and cached across variant pages.
-        import('igv/dist/igv.min.js')
-            .then((mod: any) => {
-                // The UMD bundle attaches itself to window.igv; webpack's module
-                // namespace for it comes back empty, so check both.
-                const igv = [mod?.default, mod, (window as any).igv].find(
-                    candidate => typeof candidate?.createBrowser === 'function'
-                );
-                if (!igv) {
-                    throw new Error('igv.js did not expose createBrowser.');
-                }
+        // igv.js is loaded from its CDN rather than bundled. The npm UMD build
+        // takes a CommonJS path once webpack optimises it for production and
+        // throws "require is not defined"; the ESM build resolves to an empty
+        // namespace under CRA. A script tag sidesteps both, and igv.js already
+        // needs the network for the hg19 reference.
+        loadIgv()
+            .then(igv => {
                 return igv.createBrowser(mount, {
                     genome: 'hg19',
                     locus: position.locus,
