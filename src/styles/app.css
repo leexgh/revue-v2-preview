@@ -1123,6 +1123,17 @@ table.data tbody tr:last-child td {
     background: var(--bg-raised);
 }
 
+.evidence-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.evidence-row {
+    border-left: 2px solid var(--border);
+    padding-left: 12px;
+}
+
 .evidence-quote {
     border-left: 3px solid var(--border-strong);
     padding: 4px 0 4px 12px;

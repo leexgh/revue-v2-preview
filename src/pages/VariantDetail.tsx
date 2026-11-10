@@ -27,55 +27,42 @@ import {
     sampleTypeLabel,
 } from '../store/bundle';
 
-const EvidenceCard: React.FC<{ item: EvidenceItem }> = ({ item }) => {
-    const reference = getReference(item.source);
+/** One assay from one paper. The locator stays in the data, not on screen. */
+const EvidenceItemRow: React.FC<{ item: EvidenceItem }> = ({ item }) => {
     const isPlaceholder = (field: string) => item.placeholders.includes(field);
     const curated = !!item.assay;
     return (
-        <div className="evidence-item">
-            <div className="spread" style={{ marginBottom: 6 }}>
-                <div className="row">
-                    {item.direction !== 'SUPPORTS' && (
-                        <Chip tone="warn">{item.direction.toLowerCase()}</Chip>
-                    )}
-                    {curated ? (
-                        <>
-                            <strong>
-                                {assayLabel[item.assay!] || item.assay}
-                                {item.sequenced && ', product sequenced'}
-                            </strong>
-                            {item.shows && (
-                                <Chip
-                                    tone={showsTone[item.shows] || 'neutral'}
-                                    title={`What this result demonstrates: ${
-                                        showsLabel[item.shows] || item.shows
-                                    }`}
-                                >
-                                    shows {showsLabel[item.shows] || item.shows}
-                                </Chip>
-                            )}
-                        </>
-                    ) : (
-                        <span className="muted">
-                            Assay not curated
-                            <PlaceholderTag
-                                label="to curate"
-                                title="The v1 data stores a citation but not how the abnormal transcript was shown. Reading the paper fills in the assay, what it was measured in, and what it demonstrates."
-                            />
-                        </span>
-                    )}
-                </div>
-                <div className="small">
-                    {reference?.pubmedId ? (
-                        <ExternalLink
-                            href={`https://pubmed.ncbi.nlm.nih.gov/${reference.pubmedId}/`}
-                        >
-                            {reference.citation || item.source}
-                        </ExternalLink>
-                    ) : (
-                        reference?.citation || item.source
-                    )}
-                </div>
+        <div className="evidence-row">
+            <div className="row" style={{ marginBottom: 4 }}>
+                {item.direction !== 'SUPPORTS' && (
+                    <Chip tone="warn">{item.direction.toLowerCase()}</Chip>
+                )}
+                {curated ? (
+                    <>
+                        <strong>
+                            {assayLabel[item.assay!] || item.assay}
+                            {item.sequenced && ', product sequenced'}
+                        </strong>
+                        {item.shows && (
+                            <Chip
+                                tone={showsTone[item.shows] || 'neutral'}
+                                title={`What this result demonstrates: ${
+                                    showsLabel[item.shows] || item.shows
+                                }`}
+                            >
+                                shows {showsLabel[item.shows] || item.shows}
+                            </Chip>
+                        )}
+                    </>
+                ) : (
+                    <span className="muted">
+                        Assay not curated
+                        <PlaceholderTag
+                            label="to curate"
+                            title="The v1 data stores a citation but not how the abnormal transcript was shown. Reading the paper fills in the assay, what it was measured in, and what it demonstrates."
+                        />
+                    </span>
+                )}
             </div>
 
             <div className="small muted">
@@ -105,29 +92,63 @@ const EvidenceCard: React.FC<{ item: EvidenceItem }> = ({ item }) => {
                 )}
             </div>
 
-            {item.finding && <div style={{ marginTop: 8 }}>{item.finding}</div>}
-
+            {item.finding && <div style={{ marginTop: 6 }}>{item.finding}</div>}
             {item.quantification && (
                 <div className="small muted">{item.quantification}</div>
             )}
-
-            {item.quote && (
-                <div className="evidence-quote small">“{item.quote}”</div>
-            )}
-
-            {item.locator && (
-                <div className="tiny muted" style={{ marginTop: 8 }}>
-                    {Object.entries(item.locator)
-                        .map(([key, value]) => `${key}: ${value}`)
-                        .join(' · ')}
-                </div>
-            )}
-
+            {item.quote && <div className="evidence-quote small">“{item.quote}”</div>}
             {!curated && (
-                <div className="small faint" style={{ marginTop: 8 }}>
+                <div className="small faint" style={{ marginTop: 6 }}>
                     Cited as the source; the paper has not been read into reVUE yet.
                 </div>
             )}
+        </div>
+    );
+};
+
+/** Everything one paper contributes, under a single heading. */
+const EvidenceSource: React.FC<{ source: string; items: EvidenceItem[] }> = ({
+    source,
+    items,
+}) => {
+    const reference = getReference(source);
+    return (
+        <div className="evidence-item">
+            <div className="spread" style={{ marginBottom: 10 }}>
+                <div>
+                    <div style={{ fontWeight: 600 }}>
+                        {reference?.pubmedId ? (
+                            <ExternalLink
+                                href={`https://pubmed.ncbi.nlm.nih.gov/${reference.pubmedId}/`}
+                            >
+                                {reference.citation || source}
+                            </ExternalLink>
+                        ) : (
+                            reference?.citation || source
+                        )}
+                    </div>
+                    {reference?.title && (
+                        <div className="tiny muted" style={{ maxWidth: 520 }}>
+                            {reference.title}
+                            {reference.journal && (
+                                <em>
+                                    {' '}
+                                    {reference.journal}
+                                    {reference.year ? `, ${reference.year}` : ''}
+                                </em>
+                            )}
+                        </div>
+                    )}
+                </div>
+                <span className="tiny faint nowrap">
+                    {items.length} item{items.length === 1 ? '' : 's'}
+                </span>
+            </div>
+            <div className="evidence-rows">
+                {items.map((item, index) => (
+                    <EvidenceItemRow key={index} item={item} />
+                ))}
+            </div>
         </div>
     );
 };
@@ -155,6 +176,14 @@ export const VariantDetail: React.FC = () => {
     // The level is always a level *in* a tumour type. reVUE-data stores it
     // without one, so show the curated cancer type when there is one and fall
     // back to the cancer type this variant is most often observed in.
+    // One block per paper: every assay that paper contributed, together.
+    const evidenceBySource = Array.from(
+        variant.evidence.reduce((map, item) => {
+            map.set(item.source, [...(map.get(item.source) || []), item]);
+            return map;
+        }, new Map<string, EvidenceItem[]>())
+    );
+
     const levelCancerType = cancerTypes.length
         ? { code: cancerTypes[0].code, name: cancerTypes[0].name, from: 'curated' }
         : variant.observedCancerTypes.length
@@ -387,8 +416,12 @@ export const VariantDetail: React.FC = () => {
                         />
                         {tab === 'evidence' && (
                             <div className="stack" style={{ gap: 12 }}>
-                                {variant.evidence.map((item, index) => (
-                                    <EvidenceCard key={index} item={item} />
+                                {evidenceBySource.map(([source, items]) => (
+                                    <EvidenceSource
+                                        key={source}
+                                        source={source}
+                                        items={items}
+                                    />
                                 ))}
                                 {!variant.evidence.length && (
                                     <div className="small faint">
